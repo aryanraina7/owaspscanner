@@ -18,9 +18,8 @@ steps:
 
   - task: Docker@2
     inputs:
-      containerRegistry: 'myAzureContainerRegistry' # Replace with your container registry
-      repository: 'owasp/zap2docker-stable'
       command: 'run'
+      container: 'owasp/zap2docker-stable'
       arguments: '-t $(scan_url) -o zap_report.html'
 
   - task: PublishBuildArtifacts@1
