@@ -1,0 +1,36 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  scan_url: 'http://your-application-url'
+
+steps:
+  - task: UseDotNet@2
+    inputs:
+      packageType: 'sdk'
+      version: '6.x.x'
+      installationPath: $(Agent.ToolsDirectory)/dotnet
+
+  - task: Docker@2
+    inputs:
+      containerRegistry: 'myAzureContainerRegistry' # Replace with your container registry
+      repository: 'owasp/zap2docker-stable'
+      command: 'run'
+      arguments: '-t $(scan_url) -o zap_report.html'
+
+  - task: PublishBuildArtifacts@1
+    inputs:
+      PathtoPublish: 'zap_report.html'
+      ArtifactName: 'OWASP_ZAP_Report'
+
+  - task: Bash@3
+    inputs:
+      targetType: 'inline'
+      script: |
+        echo "OWASP ZAP Scan completed."
+        echo "Report generated and published as an artifact."
