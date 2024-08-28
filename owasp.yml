@@ -1,35 +1,43 @@
 trigger:
-  branches:
-    include:
-      - main
+- main
 
 pool:
   vmImage: 'ubuntu-latest'
 
 variables:
-  scan_url: 'http://your-application-url'
+  zapPath: '/usr/share/zaproxy'
+  targetUrl: 'https://your-target-url.com'
+  reportDir: '$(Build.ArtifactStagingDirectory)/owasp-reports'
+  reportHtml: 'owasp-zap-report.html'
+  reportXml: 'owasp-zap-report.xml'
 
-steps:
-  - task: UseDotNet@2
-    inputs:
-      packageType: 'sdk'
-      version: '6.x.x'
-      installationPath: $(Agent.ToolsDirectory)/dotnet
+jobs:
+- job: OWASP_ZAP_Scan
+  displayName: 'Run OWASP ZAP Security Scan'
+  steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '3.x'
+        addToPath: true
 
-  - task: Docker@2
-    inputs:
-      command: 'run'
-      container: 'owasp/zap2docker-stable'
-      arguments: '-t $(scan_url) -o zap_report.html'
+    - script: |
+        sudo apt-get update
+        sudo apt-get install zaproxy -y
+      displayName: 'Install OWASP ZAP'
 
-  - task: PublishBuildArtifacts@1
-    inputs:
-      PathtoPublish: 'zap_report.html'
-      ArtifactName: 'OWASP_ZAP_Report'
+    - script: |
+        zap.sh -daemon -port 8080 -config api.addrs.addr.name=127.0.0.1 -config api.addrs.addr.regex=false
+        sleep 30  # Give ZAP time to start
+      displayName: 'Start OWASP ZAP in daemon mode'
 
-  - task: Bash@3
-    inputs:
-      targetType: 'inline'
-      script: |
-        echo "OWASP ZAP Scan completed."
-        echo "Report generated and published as an artifact."
+    - script: |
+        zap.sh -cmd -quickurl $(targetUrl) -quickout $(reportDir)/$(reportXml)
+      displayName: 'Run OWASP ZAP Scan'
+
+    - script: |
+        zap.sh -cmd -quickurl $(targetUrl) -quickout $(reportDir)/$(reportHtml)
+      displayName: 'Generate OWASP ZAP HTML Report'
+
+    - publish: $(reportDir)
+      artifact: 'OWASPReports'
+      displayName: 'Publish OWASP ZAP Reports'
