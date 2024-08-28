@@ -2,7 +2,7 @@ trigger:
 - main
 
 pool:
-  vmImage: 'ubuntu-latest'
+  PoolName: 'Default'
 
 variables:
   zapPath: '/usr/share/zaproxy'
