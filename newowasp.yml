@@ -30,12 +30,14 @@ stages:
       displayName: 'Install OWASP ZAP Python API'
   
     - script: |
-        # Start ZAP as a daemon
-        zap.sh -daemon -port 8080 -config api.disablekey=true
-
-        # Give ZAP some time to start
-        sleep 30
-
+        # Start ZAP as a daemon in the background
+        zap.sh -daemon -port 8080 -config api.disablekey=true &
+        
+        # Give ZAP more time to start
+        sleep 60
+      displayName: 'Start OWASP ZAP Daemon'
+    
+    - script: |
         # Run ZAP scan using Python API
         python <<EOF
         from zapv2 import ZAPv2
@@ -71,6 +73,9 @@ stages:
         EOF
       displayName: 'Run OWASP ZAP Scan'
     
+    - script: cat /path-to-zap/logs/zap.log
+      displayName: 'Display ZAP Logs'
+
     - task: PublishBuildArtifacts@1
       inputs:
         pathToPublish: '$(System.DefaultWorkingDirectory)/zap_report.html'
@@ -106,5 +111,3 @@ stages:
         # Review or take further actions on the ZAP report if needed
         echo "OWASP ZAP Report downloaded"
       displayName: 'Review ZAP Report'
-
-
