@@ -4,59 +4,34 @@ trigger:
 - main # Adjust the branch as needed
 
 pool:
-  vmImage: 'ubuntu-latest' # Microsoft-hosted Ubuntu agent
+  name: ARM # Replace with your self-hosted agent pool name
 
 stages:
-- stage: OWASP_ZAP_Scan
-  displayName: OWASP ZAP Security Scan
+- stage: RunOWASPZAPScan
+  displayName: 'Run OWASP ZAP Scan'
   jobs:
-  - job: OWASP_ZAP_Scan_Job
-    displayName: OWASP ZAP Scan Job
+  - job: Scan
+    displayName: 'Perform OWASP ZAP Vulnerability Scan'
     steps:
-
-    - task: UsePythonVersion@0
-      inputs:
-        versionSpec: '3.x'
-        addToPath: true
+    - script: |
+        # Display Docker version
+        docker --version
+        # Pull the latest OWASP ZAP Docker image
+        docker pull zaproxy/zap-stable
+      displayName: 'Prepare Docker Image'
 
     - script: |
-        python -m pip install --upgrade pip
-        pip install python-owasp-zap-v2.4  # Install OWASP ZAP Python API
-      displayName: 'Install OWASP ZAP Python API'
+        # Run OWASP ZAP scan and generate XML report
+        docker run --rm -v $(System.DefaultWorkingDirectory):/zap/wrk/:rw -t zaproxy/zap-stable zap-full-scan.py -t http://cricbuzz.com -x abc.xml
+      displayName: 'Run OWASP ZAP Scan'
     
     - script: |
-        # Run ZAP scan using Docker
-        docker run --rm -v $(pwd):/zap/wrk/:rw -t owasp/zap2docker-stable zap-full-scan.py -t http://your-target-url.com -x zap_report.xml
-      displayName: 'Run OWASP ZAP Scan'
+        # Generate HTML report from the XML report
+        docker run --rm -v $(System.DefaultWorkingDirectory):/zap/wrk/:rw -t zaproxy/zap-stable zap-cli report -f html -o /zap/wrk/abc.html
+      displayName: 'Generate HTML Report'
     
     - task: PublishBuildArtifacts@1
       inputs:
-        pathToPublish: '$(System.DefaultWorkingDirectory)/zap_report.xml'
+        pathToPublish: '$(System.DefaultWorkingDirectory)/abc.html'
         artifactName: 'ZAPReport'
       displayName: 'Publish OWASP ZAP Report'
-
-    - task: PublishTestResults@2
-      inputs:
-        testResultsFormat: 'JUnit'
-        testResultsFiles: '**/zap_report.xml'
-        failTaskOnFailedTests: true
-      displayName: 'Publish Test Results'
-
-- stage: Review_Report
-  displayName: Review ZAP Report
-  dependsOn: OWASP_ZAP_Scan
-  jobs:
-  - job: Review_Report_Job
-    displayName: Review Report Job
-    steps:
-    - task: DownloadBuildArtifacts@0
-      inputs:
-        buildType: 'current'
-        artifactName: 'ZAPReport'
-        downloadPath: '$(System.DefaultWorkingDirectory)'
-      displayName: 'Download ZAP Report'
-
-    - script: |
-        # Review or take further actions on the ZAP report if needed
-        echo "OWASP ZAP Report downloaded"
-      displayName: 'Review ZAP Report'
