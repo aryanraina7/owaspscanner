@@ -1,43 +1,64 @@
+# Docker Image Scanning
+
 trigger:
-- main
+- main # Adjust the branch as needed
 
 pool:
-  PoolName: 'Default'
+  name: ARM
+  vmImage: 'ubuntu-latest' # Changed to a more common image
 
-variables:
-  zapPath: '/usr/share/zaproxy'
-  targetUrl: 'https://your-target-url.com'
-  reportDir: '$(Build.ArtifactStagingDirectory)/owasp-reports'
-  reportHtml: 'owasp-zap-report.html'
-  reportXml: 'owasp-zap-report.xml'
+stages:
+- stage: OWASP_ZAP_Scan
+  displayName: OWASP ZAP Security Scan
+  jobs:
+  - job: OWASP_ZAP_Scan_Job
+    displayName: OWASP ZAP Scan Job
+    pool:
+      name: ARM
+      demands:
+      - agent.name -equals arm
+    steps:
 
-jobs:
-- job: OWASP_ZAP_Scan
-  displayName: 'Run OWASP ZAP Security Scan'
-  steps:
-    - task: UsePythonVersion@0
+    - task: Docker@2
       inputs:
-        versionSpec: '3.x'
-        addToPath: true
-
-    - script: |
-        sudo apt-get update
-        sudo apt-get install zaproxy -y
-      displayName: 'Install OWASP ZAP'
-
-    - script: |
-        zap.sh -daemon -port 8080 -config api.addrs.addr.name=127.0.0.1 -config api.addrs.addr.regex=false
-        sleep 30  # Give ZAP time to start
-      displayName: 'Start OWASP ZAP in daemon mode'
-
-    - script: |
-        zap.sh -cmd -quickurl $(targetUrl) -quickout $(reportDir)/$(reportXml)
+        command: 'run'
+        container: 'owasp/zap2docker-stable'
+        arguments: |
+          zap-full-scan.py -t http://your-target-url.com -r zap_report.html -x zap_report.xml
       displayName: 'Run OWASP ZAP Scan'
 
-    - script: |
-        zap.sh -cmd -quickurl $(targetUrl) -quickout $(reportDir)/$(reportHtml)
-      displayName: 'Generate OWASP ZAP HTML Report'
+    - task: PublishBuildArtifacts@1
+      inputs:
+        pathToPublish: '$(System.DefaultWorkingDirectory)/zap_report.html'
+        artifactName: 'ZAPReport'
+      displayName: 'Publish OWASP ZAP Report'
 
-    - publish: $(reportDir)
-      artifact: 'OWASPReports'
-      displayName: 'Publish OWASP ZAP Reports'
+    - task: PublishTestResults@2
+      inputs:
+        testResultsFormat: 'JUnit'
+        testResultsFiles: '**/zap_report.xml'
+        failTaskOnFailedTests: true
+      displayName: 'Publish Test Results'
+
+- stage: Review_Report
+  displayName: Review ZAP Report
+  dependsOn: OWASP_ZAP_Scan
+  jobs:
+  - job: Review_Report_Job
+    displayName: Review Report Job
+    pool:
+      name: ARM
+      demands:
+      - agent.name -equals arm
+    steps:
+    - task: DownloadBuildArtifacts@0
+      inputs:
+        buildType: 'current'
+        artifactName: 'ZAPReport'
+        downloadPath: '$(System.DefaultWorkingDirectory)'
+      displayName: 'Download ZAP Report'
+
+    - script: |
+        # Review or take further actions on the ZAP report if needed
+        echo "OWASP ZAP Report downloaded"
+      displayName: 'Review ZAP Report'
