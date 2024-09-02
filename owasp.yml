@@ -1,11 +1,10 @@
-# Docker Image Scanning
+# OWASP Scanning Pipeline Without Docker
 
 trigger:
 - main # Adjust the branch as needed
 
 pool:
-  name: ARM
-  vmImage: 'ubuntu-latest' # Changed to a more common image
+  vmImage: 'ubuntu-latest' # Use a Microsoft-hosted agent with Python support
 
 stages:
 - stage: OWASP_ZAP_Scan
@@ -13,18 +12,56 @@ stages:
   jobs:
   - job: OWASP_ZAP_Scan_Job
     displayName: OWASP ZAP Scan Job
-    pool:
-      name: ARM
-      demands:
-      - agent.name -equals arm
     steps:
 
-    - task: Docker@2
+    - task: UsePythonVersion@0
       inputs:
-        command: 'run'
-        container: 'owasp/zap2docker-stable'
-        arguments: |
-          zap-full-scan.py -t http://your-target-url.com -r zap_report.html -x zap_report.xml
+        versionSpec: '3.x'
+        addToPath: true
+
+    - script: |
+        python -m pip install --upgrade pip
+        pip install python-owasp-zap-v2.4
+        # Download and install OWASP ZAP
+        wget https://github.com/zaproxy/zaproxy/releases/download/v2.15.0/ZAP_2.15.0_Unix.tar.gz
+        tar -xzf ZAP_2.15.0_Unix.tar.gz
+        cd ZAP_2.15.0
+        # Start ZAP
+        ./zap.sh -daemon -port 8080 -config api.disablekey=true &
+        sleep 60
+        # Run ZAP scan using Python API
+        python <<EOF
+        from zapv2 import ZAPv2
+        import time
+
+        target = 'http://your-target-url.com'
+        zap = ZAPv2(apikey='')
+
+        print('Accessing target {}'.format(target))
+        zap.urlopen(target)
+        time.sleep(2)
+
+        print('Spidering target {}'.format(target))
+        scanid = zap.spider.scan(target)
+        while int(zap.spider.status(scanid)) < 100:
+            print('Spider progress: {}%'.format(zap.spider.status(scanid)))
+            time.sleep(2)
+        
+        print('Spider completed')
+        
+        print('Scanning target {}'.format(target))
+        scanid = zap.ascan.scan(target)
+        while int(zap.ascan.status(scanid)) < 100:
+            print('Scan progress: {}%'.format(zap.ascan.status(scanid)))
+            time.sleep(5)
+
+        print('Scan completed')
+
+        # Generate report
+        with open('zap_report.html', 'w') as f:
+            f.write(zap.core.htmlreport())
+
+        EOF
       displayName: 'Run OWASP ZAP Scan'
 
     - task: PublishBuildArtifacts@1
@@ -46,10 +83,6 @@ stages:
   jobs:
   - job: Review_Report_Job
     displayName: Review Report Job
-    pool:
-      name: ARM
-      demands:
-      - agent.name -equals arm
     steps:
     - task: DownloadBuildArtifacts@0
       inputs:
