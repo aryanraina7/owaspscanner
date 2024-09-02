@@ -1,0 +1,109 @@
+# OWASP Scanning Pipeline
+
+trigger:
+- main # Adjust the branch as needed
+
+pool:
+  name: ARM
+  vmImage: 'arm'
+
+stages:
+- stage: OWASP_ZAP_Scan
+  displayName: OWASP ZAP Security Scan
+  jobs:
+  - job: OWASP_ZAP_Scan_Job
+    displayName: OWASP ZAP Scan Job
+    pool:
+      name: ARM
+      demands:
+      - agent.name -equals arm
+    steps:
+    
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '3.x'
+        addToPath: true
+
+    - script: |
+        python -m pip install --upgrade pip
+        pip install zapv2  # Install OWASP ZAP Python API
+      displayName: 'Install OWASP ZAP Python API'
+    
+    - script: |
+        # Start ZAP as a daemon
+        zap.sh -daemon -port 8080 -config api.disablekey=true
+
+        # Give ZAP some time to start
+        sleep 30
+
+        # Run ZAP scan using Python API
+        python <<EOF
+        from zapv2 import ZAPv2
+        import time
+
+        target = 'http://your-target-url.com'
+        zap = ZAPv2(apikey='')
+
+        print('Accessing target {}'.format(target))
+        zap.urlopen(target)
+        time.sleep(2)
+
+        print('Spidering target {}'.format(target))
+        scanid = zap.spider.scan(target)
+        while int(zap.spider.status(scanid)) < 100:
+            print('Spider progress: {}%'.format(zap.spider.status(scanid)))
+            time.sleep(2)
+        
+        print('Spider completed')
+        
+        print('Scanning target {}'.format(target))
+        scanid = zap.ascan.scan(target)
+        while int(zap.ascan.status(scanid)) < 100:
+            print('Scan progress: {}%'.format(zap.ascan.status(scanid)))
+            time.sleep(5)
+
+        print('Scan completed')
+
+        # Generate report
+        with open('zap_report.html', 'w') as f:
+            f.write(zap.core.htmlreport())
+
+        EOF
+      displayName: 'Run OWASP ZAP Scan'
+    
+    - task: PublishBuildArtifacts@1
+      inputs:
+        pathToPublish: '$(System.DefaultWorkingDirectory)/zap_report.html'
+        artifactName: 'ZAPReport'
+      displayName: 'Publish OWASP ZAP Report'
+
+    - task: PublishTestResults@2
+      inputs:
+        testResultsFormat: 'JUnit'
+        testResultsFiles: '**/zap_report.xml'
+        failTaskOnFailedTests: true
+      displayName: 'Publish Test Results'
+
+- stage: Review_Report
+  displayName: Review ZAP Report
+  dependsOn: OWASP_ZAP_Scan
+  jobs:
+  - job: Review_Report_Job
+    displayName: Review Report Job
+    pool:
+      name: ARM
+      demands:
+      - agent.name -equals arm
+    steps:
+    - task: DownloadBuildArtifacts@0
+      inputs:
+        buildType: 'current'
+        artifactName: 'ZAPReport'
+        downloadPath: '$(System.DefaultWorkingDirectory)'
+      displayName: 'Download ZAP Report'
+
+    - script: |
+        # Review or take further actions on the ZAP report if needed
+        echo "OWASP ZAP Report downloaded"
+      displayName: 'Review ZAP Report'
+
