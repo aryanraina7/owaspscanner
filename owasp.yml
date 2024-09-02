@@ -1,10 +1,10 @@
-# OWASP Scanning Pipeline Without Docker
+# OWASP Scanning Pipeline Without Daemon
 
 trigger:
 - main # Adjust the branch as needed
 
 pool:
-  vmImage: 'ubuntu-latest' # Use a Microsoft-hosted agent with Python support
+  vmImage: 'ubuntu-latest' # Microsoft-hosted Ubuntu agent
 
 stages:
 - stage: OWASP_ZAP_Scan
@@ -21,52 +21,17 @@ stages:
 
     - script: |
         python -m pip install --upgrade pip
-        pip install python-owasp-zap-v2.4
-        # Download and install OWASP ZAP
-        wget https://github.com/zaproxy/zaproxy/releases/download/v2.15.0/ZAP_2.15.0_Unix.tar.gz
-        tar -xzf ZAP_2.15.0_Unix.tar.gz
-        cd ZAP_2.15.0
-        # Start ZAP
-        ./zap.sh -daemon -port 8080 -config api.disablekey=true &
-        sleep 60
-        # Run ZAP scan using Python API
-        python <<EOF
-        from zapv2 import ZAPv2
-        import time
-
-        target = 'http://your-target-url.com'
-        zap = ZAPv2(apikey='')
-
-        print('Accessing target {}'.format(target))
-        zap.urlopen(target)
-        time.sleep(2)
-
-        print('Spidering target {}'.format(target))
-        scanid = zap.spider.scan(target)
-        while int(zap.spider.status(scanid)) < 100:
-            print('Spider progress: {}%'.format(zap.spider.status(scanid)))
-            time.sleep(2)
-        
-        print('Spider completed')
-        
-        print('Scanning target {}'.format(target))
-        scanid = zap.ascan.scan(target)
-        while int(zap.ascan.status(scanid)) < 100:
-            print('Scan progress: {}%'.format(zap.ascan.status(scanid)))
-            time.sleep(5)
-
-        print('Scan completed')
-
-        # Generate report
-        with open('zap_report.html', 'w') as f:
-            f.write(zap.core.htmlreport())
-
-        EOF
+        pip install python-owasp-zap-v2.4  # Install OWASP ZAP Python API
+      displayName: 'Install OWASP ZAP Python API'
+    
+    - script: |
+        # Run ZAP scan using Docker
+        docker run --rm -v $(pwd):/zap/wrk/:rw -t owasp/zap2docker-stable zap-full-scan.py -t http://your-target-url.com -x zap_report.xml
       displayName: 'Run OWASP ZAP Scan'
-
+    
     - task: PublishBuildArtifacts@1
       inputs:
-        pathToPublish: '$(System.DefaultWorkingDirectory)/zap_report.html'
+        pathToPublish: '$(System.DefaultWorkingDirectory)/zap_report.xml'
         artifactName: 'ZAPReport'
       displayName: 'Publish OWASP ZAP Report'
 
