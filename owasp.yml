@@ -1,5 +1,4 @@
 # OWASP Scanning Pipeline Without Daemon
-
 trigger:
 - main # Adjust the branch as needed
 
@@ -22,16 +21,34 @@ stages:
 
     - script: |
         # Run OWASP ZAP scan and generate XML report
-        docker run --rm -v $(System.DefaultWorkingDirectory):/zap/wrk/:rw -t zaproxy/zap-stable zap-full-scan.py -t http://cricbuzz.com -x abc.xml
+        docker run --rm -v $(System.DefaultWorkingDirectory):/zap/wrk/:rw -t zaproxy/zap-stable zap-full-scan.py -t https://cricbuzz.com -x /zap/wrk/zap_report.xml
       displayName: 'Run OWASP ZAP Scan'
     
     - script: |
+        # Check if the XML report was created
+        if [ -f "$(System.DefaultWorkingDirectory)/zap_report.xml" ]; then
+            echo "XML report generated successfully"
+        else
+            echo "Error: XML report not generated"
+            exit 1
+        fi
+
         # Generate HTML report from the XML report
-        docker run --rm -v $(System.DefaultWorkingDirectory):/zap/wrk/:rw -t zaproxy/zap-stable zap-cli report -f html -o /zap/wrk/abc.html
+        docker run --rm -v $(System.DefaultWorkingDirectory):/zap/wrk/:rw -t zaproxy/zap-stable zap-cli report -f html -o /zap/wrk/zap_report.html
       displayName: 'Generate HTML Report'
+    
+    - script: |
+        # Check if the HTML report was created
+        if [ -f "$(System.DefaultWorkingDirectory)/zap_report.html" ]; then
+            echo "HTML report generated successfully"
+        else
+            echo "Error: HTML report not generated"
+            exit 1
+        fi
+      displayName: 'Verify HTML Report'
     
     - task: PublishBuildArtifacts@1
       inputs:
-        pathToPublish: '$(System.DefaultWorkingDirectory)/abc.html'
+        pathToPublish: '$(System.DefaultWorkingDirectory)/zap_report.html'
         artifactName: 'ZAPReport'
       displayName: 'Publish OWASP ZAP Report'
