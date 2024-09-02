@@ -1,0 +1,17 @@
+trigger:
+- main
+
+pool:
+  name: ARM # Your self-hosted agent pool name
+
+stages:
+- stage: BuildAndScan
+  jobs:
+  - job: DockerJob
+    steps:
+    - script: |
+        docker --version
+        docker pull owasp/zap2docker-stable
+        docker run --rm -v $(pwd):/zap/wrk/:rw -t owasp/zap2docker-stable zap-full-scan.py -t http://your-target-url.com -x zap_report.xml
+      displayName: 'Run OWASP ZAP Scan'
+
