@@ -1,0 +1,31 @@
+trigger:
+- main
+
+pool:
+  name: ARM # Self-hosted agent pool name
+
+stages:
+- stage: RunOWASPZAPScan
+  displayName: 'Run OWASP ZAP Scan'
+  jobs:
+  - job: Scan
+    displayName: 'Perform OWASP ZAP Vulnerability Scan'
+    steps:
+    - script: |
+        docker --version
+        docker pull zaproxy/zap-stable
+        # Run OWASP ZAP baseline scan (quicker than full scan)
+        docker run --rm -v $(System.DefaultWorkingDirectory):/zap/wrk/:rw -t zaproxy/zap-stable zap-baseline.py -t $(targetUrl) -r /zap/wrk/$(htmlFileName).html -x /zap/wrk/$(xmlFileName).xml || true
+      displayName: 'Run OWASP ZAP Baseline Scan'
+    
+    - task: PublishBuildArtifacts@1
+      inputs:
+        pathToPublish: '$(System.DefaultWorkingDirectory)/$(htmlFileName).html'
+        artifactName: 'ZAPReportHTML'
+      displayName: 'Publish OWASP ZAP HTML Report'
+    
+    - task: PublishBuildArtifacts@1
+      inputs:
+        pathToPublish: '$(System.DefaultWorkingDirectory)/$(xmlFileName).xml'
+        artifactName: 'ZAPReportXML'
+      displayName: 'Publish OWASP ZAP XML Report'
