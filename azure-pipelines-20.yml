@@ -1,0 +1,38 @@
+trigger:
+- main # Adjust to your branch
+
+pool:
+  name: ARM # Self-hosted agent pool name
+
+variables:
+- group: 'owaspvariables'  # Reference to the variable group
+
+stages:
+- stage: RunOWASPZAPScan
+  displayName: 'Run OWASP ZAP Scan'
+  jobs:
+  - job: Scan
+    displayName: 'Perform OWASP ZAP Vulnerability Scan'
+    steps:
+    - script: |
+        echo "Checking Docker Version:"
+        docker --version
+        echo "Pulling OWASP ZAP Docker Image:"
+        docker pull zaproxy/zap-stable
+        echo "Running OWASP ZAP Scan:"
+        # Run OWASP ZAP scan using variables from the group
+        docker run --rm -v $(System.DefaultWorkingDirectory):/zap/wrk/:rw -t zaproxy/zap-stable zap-full-scan.py -t "$(TARGET_URL)" -r /zap/wrk/"$(HTML_REPORT_NAME)" -x /zap/wrk/"$(XML_REPORT_NAME)" || true
+      displayName: 'Run OWASP ZAP Scan'
+    
+    - task: PublishBuildArtifacts@1
+      inputs:
+        pathToPublish: '$(System.DefaultWorkingDirectory)/$(HTML_REPORT_NAME)'
+        artifactName: 'ZAPReportHTML'
+      displayName: 'Publish OWASP ZAP HTML Report'
+    
+    - task: PublishBuildArtifacts@1
+      inputs:
+        pathToPublish: '$(System.DefaultWorkingDirectory)/$(XML_REPORT_NAME)'
+        artifactName: 'ZAPReportXML'
+      displayName: 'Publish OWASP ZAP XML Report'
+
